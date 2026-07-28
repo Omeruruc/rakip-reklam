@@ -1,0 +1,53 @@
+{
+  "name": "rakip-reklam-takip",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx scripts/seed.ts",
+    "verify:actor": "tsx scripts/verify-actor.ts",
+    "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
+    "db:local": "tsx scripts/local-db.ts",
+    "excel:sample": "tsx scripts/make-sample-excel.ts",
+    "db:transfer": "tsx scripts/migrate-data.ts"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.1.2",
+    "@tanstack/react-table": "^8.21.2",
+    "apify-client": "^2.11.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "drizzle-orm": "^0.44.2",
+    "inngest": "^3.35.0",
+    "next": "^15.5.0",
+    "postgres": "^3.4.5",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.0.2",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.4",
+    "@electric-sql/pglite-socket": "^0.2.7",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "dotenv": "^16.4.7",
+    "drizzle-kit": "^0.31.1",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

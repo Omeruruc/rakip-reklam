@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-50: #f5f7fa;
+  --color-ink-100: #e9edf3;
+  --color-ink-200: #cfd7e3;
+  --color-ink-300: #a7b4c8;
+  --color-ink-400: #6f819c;
+  --color-ink-500: #4a5b76;
+  --color-ink-600: #35455e;
+  --color-ink-700: #26334a;
+  --color-ink-800: #1b2740;
+  --color-ink-900: #131d33;
+
+  --color-brand-500: #e2691f;
+  --color-brand-600: #c4571a;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+:root {
+  --background: #f6f7f9;
+  --foreground: #131d33;
+  --card: #ffffff;
+  --border: #e3e8ef;
+  --muted: #6f819c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0f1626;
+    --foreground: #e9edf3;
+    --card: #17203a;
+    --border: #26334a;
+    --muted: #a7b4c8;
+  }
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@utility card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+@utility muted {
+  color: var(--muted);
+}
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}

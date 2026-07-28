@@ -1,0 +1,20 @@
+node_modules
+.next
+out
+build
+.env
+.env.local
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+.vercel
+coverage
+drizzle/meta/_journal.json.bak
+scratch/
+.pglite/
+.apify-verify/
+ornek-bayi-rakip.xlsx
+
+# Claude Code izinleri makineye özeldir, izlenmez
+.claude/settings.local.json
