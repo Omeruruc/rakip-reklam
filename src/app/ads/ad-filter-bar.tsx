@@ -28,6 +28,10 @@ export function AdFilterBar({
     if (value) next.set(key, value);
     else next.delete(key);
     next.delete("ad");
+    // Filtre değişince sayfa 1'e dön — yoksa daralan sonuçta boş bir
+    // sayfada kalınabilir (örn. filtre önceki sayfa sayısını 3'e düşürürken
+    // kullanıcı hâlâ sayfa 6'daysa).
+    next.delete("page");
     router.push(`/ads?${next.toString()}`);
   }
 

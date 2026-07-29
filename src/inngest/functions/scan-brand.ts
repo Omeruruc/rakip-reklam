@@ -142,6 +142,18 @@ export const scanBrand = inngest.createFunction(
       );
     }
 
+    /* --- Maliyetin kesinleşmesini bekle -------------------------------------
+     * Apify, çalıştırma SUCCEEDED olduğu anda usageTotalUsd'yi henüz
+     * kesinleştirmemiş olabiliyor (faturalama kısa bir gecikmeyle oturuyor).
+     * Terminal algılandığı andaki `status.costUsd` bu yüzden güvenilir değil
+     * — gözlemlenen fark birkaç kat olabiliyor. Kısa bir bekleme sonrası
+     * yeniden okumak gerçek (kesinleşmiş) maliyeti yakalar.
+     */
+    await step.sleep(`settle-cost-${attempt}`, "10s");
+    const settledCost = await step.run(`refetch-cost-${attempt}`, () =>
+      getApifyRunStatus(started.runId),
+    );
+
     /* --- Normalize + fark analizi + yazma (tek step) ----------------------- */
     // Dataset step çıktısı olarak taşınmaz: büyük veri step sınırlarını aşar.
     const result = await step.run(`apply-results-${attempt}`, async () => {
@@ -152,7 +164,7 @@ export const scanBrand = inngest.createFunction(
         items,
         targets: scanTargets.targets,
         scannedPageIds: pageIds,
-        costUsd: status.costUsd,
+        costUsd: settledCost.costUsd ?? status.costUsd,
       });
     });
 
@@ -160,7 +172,10 @@ export const scanBrand = inngest.createFunction(
     if (!result.ok) {
       const detail = result.reason ?? "Tarama sonucu geçersiz.";
       await step.run("fail-zero-result", () =>
-        failRun(runId, detail, { adsFound: 0, costUsd: status.costUsd }),
+        failRun(runId, detail, {
+          adsFound: 0,
+          costUsd: settledCost.costUsd ?? status.costUsd,
+        }),
       );
       await step.run("alert-zero-result", () =>
         sendSlackAlert(

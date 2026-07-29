@@ -15,10 +15,11 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx scripts/seed.ts",
     "verify:actor": "tsx scripts/verify-actor.ts",
-    "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
+    "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest --poll-interval 30",
     "db:local": "tsx scripts/local-db.ts",
     "excel:sample": "tsx scripts/make-sample-excel.ts",
-    "db:transfer": "tsx scripts/migrate-data.ts"
+    "db:transfer": "tsx scripts/migrate-data.ts",
+    "slack:pin-sheet": "tsx scripts/pin-sheet-link.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.2",
@@ -27,6 +28,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.44.2",
+    "google-auth-library": "^10.9.1",
+    "google-spreadsheet": "^5.3.0",
     "inngest": "^3.35.0",
     "next": "^15.5.0",
     "postgres": "^3.4.5",

@@ -93,7 +93,7 @@ Hedefte veri varsa reddeder (`--force` ile üzerine yazılır).
 ### Doğrulama
 
 ```bash
-npm test           # 114 test (birim + gerçek SQL) — veritabanı gerektirmez
+npm test           # 147 test (birim + gerçek SQL) — veritabanı gerektirmez
 npm run typecheck
 npm run build
 ```
@@ -149,6 +149,8 @@ Tamamı `.env.example` içinde açıklamalı. Kritik olanlar:
 | `INNGEST_SIGNING_KEY` | **Üretimde zorunlu** — `/api/inngest` bu imza ile korunur |
 | `NOTIFY_BURST_LIMIT` | Tek taramada bundan fazla yeni reklam varsa tek toplu mesaj (varsayılan 25) |
 | `DB_POOL_MAX` | Yerel PGlite için `1`; üretimde boş bırakın |
+| `GOOGLE_SHEETS_ID`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` | Opsiyonel Sheets senkronu; üçü de boşsa özellik sessizce kapalı kalır (§14) |
+| `SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID` | Yalnızca tek seferlik `slack:pin-sheet` betiği için — tarama akışını etkilemez (§14) |
 
 ## 4. Ekranlar
 
@@ -276,7 +278,7 @@ Tüm markalar aynı kanalı kullandığı için **marka adı mesaj başlığınd
 
 ## 7. Kabul kriterleri — durum
 
-Otomatik doğrulananlar `npm test` ile çalışır (114 test). Veritabanına dokunan
+Otomatik doğrulananlar `npm test` ile çalışır (147 test). Veritabanına dokunan
 testler PGlite üzerinde **gerçek Postgres SQL** çalıştırır — UNIQUE kısıtları,
 `ON CONFLICT` davranışı ve transaction taklit edilmez.
 
@@ -304,28 +306,31 @@ Page ID'ler olmadan denenemedi** — bu adım için bkz. §2.
 ```
 src/
   middleware.ts              oturum kontrolü — tüm rotalar
-  db/schema.ts               6 tablo + kısıtlar (kritik: notifications UNIQUE)
+  db/schema.ts               7 tablo + kısıtlar (kritik: notifications, sheet_syncs UNIQUE)
   lib/
     excel.ts                 aşağı doldurma, kolon tespiti, doğrulama (saf)
     workbook.ts              SheetJS okuma (yalnızca sunucu)
     normalize.ts             actor çıktısı → iç şema (aday yol listeleri)
     diff.ts                  fark analizi + sıfır sonuç kuralı (saf)
     slack.ts                 mesaj kurucular + gönderim
+    sheets.ts                Sheets satır kurucu (saf) + Google Sheets yazıcı
     apify.ts                 başlat / yokla / dataset çek
     adlibrary.ts             kanonik URL, handle & Page ID çıkarma
     auth.ts                  allowlist + Web Crypto imzalı oturum
   server/
     import.ts                önizleme (yazma yok) + tek transaction upsert
     scan.ts                  tarama kayıtları, uygulama, bildirim sahiplenme
+    sheet-sync.ts            Sheets senkron sahiplenme (notifications'tan bağımsız)
     digest.ts                haftalık özet verisi
     queries.ts               arayüz okumaları
     actions.ts               tüm mutasyonlar (server actions)
-  inngest/functions/         schedule-scans, scan-brand, notify-slack, weekly-digest
+  inngest/functions/         schedule-scans, scan-brand, notify-slack, sync-sheet-row, weekly-digest
 scripts/
   verify-actor.ts            İŞ #1: actor doğrulaması ve alan kapsamı raporu
   local-db.ts                Docker'sız yerel Postgres
   make-sample-excel.ts       gerçekçi örnek dosya
   seed.ts                    pilot marka
+  pin-sheet-link.ts          Sheets linkini Slack'e gönder + pinle (§14, tek seferlik)
 ```
 
 ## 9. Pilot kontrol listesi
@@ -492,3 +497,157 @@ metin, görsel, tarih ve platform yine dolu geldi).
 - `/runs` ekranı — her taramanın maliyeti ve dönen reklam sayısı
 - Pano — son 7 günün toplamı
 - Apify hesabında aylık harcama limiti koymak son güvence
+
+## 14. Google Sheets senkronu ve Slack pinleme
+
+Slack'teki tek tek bildirimlerin yanında, her yeni rakip reklamı otomatik
+olarak bir Google Sheets tablosuna satır olarak da eklenir. Bu, Slack
+bildirimlerinden **tamamen bağımsız** çalışır: biri başarısız olsa diğerini
+etkilemez (`sheet_syncs` tablosu `notifications`'tan ayrı tutulur, aynı
+"önce sahiplen, sonra yaz" deseniyle — bkz. §6).
+
+Kolonlar (sabit, bu sırayla):
+
+| Reklam Tarihi | Rakip Bayi İsmi | URL | İnstagram Adresi | Bizdeki hangi bayinin rakibi | İl | İlçe |
+| --- | --- | --- | --- | --- | --- | --- |
+
+**İlçe kolonu şimdilik her zaman boştur.** Veri modelinde yalnızca İl
+tutuluyor; ilçe hiç toplanmıyor. İleride eklenmek istenirse yalnızca
+`src/lib/sheets.ts` içindeki `buildSheetRow` değişir, başka hiçbir yer
+etkilenmez.
+
+Üç ortam değişkeninden biri eksikse (`GOOGLE_SHEETS_ID`,
+`GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`) özellik
+sessizce devre dışı kalır — mevcut tarama ve Slack akışı hiçbir şekilde
+etkilenmez, hata da üretmez.
+
+### A) Google Cloud servis hesabı (bir kerelik)
+
+**A1. Proje oluşturun.**
+[console.cloud.google.com](https://console.cloud.google.com) adresine gidin.
+Google hesabınızla giriş yapılı değilseniz önce giriş isteyecek. Sayfanın
+üstünde, logonun yanında bir proje seçici bulunur ("Select a project" ya da
+zaten seçili bir proje adı). Ona tıklayın → sağ üstte **New Project** →
+**Project name** alanına örneğin `rakip-reklam-takip` yazın → **Create**.
+Oluşturma birkaç saniye sürer; üstteki bildirim zilinden takip edebilirsiniz.
+Oluştuktan sonra üstteki proje seçiciden bu projeyi seçili hâle getirin
+(yanlış proje seçiliyken sonraki adımlar farklı bir projede ilerler).
+
+**A2. Sheets API'yi etkinleştirin.**
+Sol üstteki ☰ (hamburger menü) → **APIs & Services → Library**
+(veya arama çubuğuna "API Library" yazıp Enter). Açılan sayfanın arama
+kutusuna `Google Sheets API` yazın, çıkan tek sonuca tıklayın, mavi
+**Enable** düğmesine basın. Düğme "Manage" yazısına dönüşürse zaten etkin
+demektir, tekrar tıklamanıza gerek yok.
+
+**A3. Servis hesabı oluşturun.**
+☰ → **APIs & Services → Credentials**. Üstte **+ CREATE CREDENTIALS** →
+açılan listeden **Service account** seçin.
+  - *Service account name:* `rakip-reklam-sheets` (istediğiniz bir ad olur,
+    Google otomatik bir e-posta türetecek)
+  - **CREATE AND CONTINUE**
+  - "Grant this service account access to project" ekranı çıkar — rol
+    seçmeden **CONTINUE** (bu servis hesabı yalnızca paylaştığınız TEK
+    Sheet'e erişecek, proje geneline rol vermeye gerek yok)
+  - Üçüncü adımı da boş geçip **DONE**
+
+**A4. JSON anahtarını indirin.**
+Az önce oluşan servis hesabının satırına (Credentials sayfasındaki listede)
+tıklayın. Üstteki sekmelerden **KEYS**'e geçin → **ADD KEY** → **Create new
+key** → tür olarak **JSON** işaretli kalsın → **CREATE**. Tarayıcı otomatik
+olarak `<proje-adı>-xxxxxxx.json` gibi bir dosya indirir — bu dosyayı bir
+daha indiremezsiniz, kaybederseniz yeni anahtar oluşturmanız gerekir.
+
+**A5. İki değeri `.env.local`'e taşıyın.**
+İndirilen JSON dosyasını bir metin editöründe açın. İçinde şuna benzer bir
+yapı görürsünüz:
+
+```json
+{
+  "type": "service_account",
+  "client_email": "rakip-reklam-sheets@proje-adi.iam.gserviceaccount.com",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg...\n-----END PRIVATE KEY-----\n",
+  ...
+}
+```
+
+`.env.local`'e şu şekilde yapıştırın:
+
+```bash
+GOOGLE_SERVICE_ACCOUNT_EMAIL="rakip-reklam-sheets@proje-adi.iam.gserviceaccount.com"
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg...\n-----END PRIVATE KEY-----\n"
+```
+
+**En sık yapılan hata burada olur — dikkat:**
+`private_key` değerini JSON'daki gibi, **çift tırnak içinde, `\n`
+karakterlerini SİLMEDEN, gerçek satır sonuna dönüştürmeden** yapıştırın.
+Yani JSON'da gördüğünüz `\n` yazısını olduğu gibi (ters eğik çizgi + n harfi
+olarak) bırakın — kendiniz Enter'a basıp çok satırlı hâle getirmeyin,
+`\n` yazılarını elle silmeyin. Kod bu kaçış karakterlerini kendisi çözer
+(`src/lib/env.ts`); yerelde ayrıca `dotenv` paketi çift tırnaklı değerlerde
+`\n`'i otomatik gerçek satır sonuna çevirir — ikisi de aynı sonuca varır,
+siz sadece JSON'dan kopyaladığınız hâliyle yapıştırın, başka bir şey
+yapmayın.
+
+### B) Google Sheets'i hazırlama
+
+1. [sheets.google.com](https://sheets.google.com) → yeni bir e-tablo açın
+   (adı önemli değil, örn. "Rakip Reklam Takip").
+2. Adres çubuğundaki `.../spreadsheets/d/`**`BU_KISIM`**`/edit` kısmını
+   `GOOGLE_SHEETS_ID`'ye yazın.
+3. **Paylaş** düğmesi → servis hesabının e-postasını
+   (`GOOGLE_SERVICE_ACCOUNT_EMAIL`) **Düzenleyen (Editor)** yetkisiyle ekleyin.
+   Bu adım atlanırsa yazma işlemi "The caller does not have permission"
+   hatasıyla başarısız olur.
+
+Sekme adı boş bırakılırsa `GOOGLE_SHEETS_TAB_NAME` varsayılanı olan
+"Rakip Reklamlar" kullanılır; sekme yoksa otomatik oluşturulur ve başlık
+satırı yazılır. Sekme zaten varsa mevcut başlıkları bozmaz.
+
+### C) Slack'e pinleme yetkisi ekleme
+
+Incoming Webhook (zaten kurulu) yalnızca mesaj gönderir, **pinleyemez**.
+Pinlemek için aynı Slack uygulamanıza Bot Token yetkisi ekleyin — yeni
+uygulama gerekmez.
+
+1. [api.slack.com/apps](https://api.slack.com/apps) → daha önce oluşturduğunuz
+   uygulama ("Rakip Reklam Takip") → sol menüde **OAuth & Permissions**.
+2. **Scopes → Bot Token Scopes** → **Add an OAuth Scope** ile ekleyin:
+   - `chat:write`
+   - `pins:write`
+3. Sayfanın üstüne dönüp **Reinstall to Workspace** (veya ilk kurulumsa
+   **Install to Workspace**) → izinleri onaylayın.
+4. Oluşan **Bot User OAuth Token** (`xoxb-...` ile başlar) →
+   `SLACK_BOT_TOKEN`'a yazın.
+5. Kanalda (`#rakip-reklam`) yazın: `/invite @Rakip Reklam Takip` — bot
+   kanala üye olmadan ne mesaj atabilir ne pinleyebilir.
+6. Kanal detaylarının altındaki **"Copy channel ID"** ile kanal kimliğini
+   (`C...` ile başlar) alın → `SLACK_CHANNEL_ID`'ye yazın.
+
+### D) Pinleme betiğini çalıştırma
+
+```bash
+npm run slack:pin-sheet
+```
+
+Kanala Sheets linkini içeren bir mesaj atar ve pinler. **İdempotenttir** —
+tekrar çalıştırırsanız, bu Sheet'e linkleyen bir pin zaten varsa hiçbir şey
+yapmadan çıkar. Yalnızca bir kez çalıştırmanız yeterli; otomatik tarama
+akışının bir parçası değildir.
+
+Yaygın hatalar ve anlamları betiğin çıktısında Türkçe açıklanır:
+`not_in_channel` (bot davet edilmemiş), `missing_scope` (yetki eksik/uygulama
+yeniden yüklenmemiş), `channel_not_found` (yanlış kanal ID'si).
+
+### E) Doğrulama
+
+```bash
+npm test                    # tests/sheets.test.ts + tests/sheet-sync-db.test.ts
+```
+
+`tests/sheets.test.ts` satır oluşturma mantığını (saf fonksiyon, ağ çağrısı
+yok) ve üç değişkenin hepsi tanımlı olmadan özelliğin kapalı kaldığını
+doğrular. `tests/sheet-sync-db.test.ts` gerçek SQL ile mükerrer satır
+imkânsızlığını ve Slack'ten bağımsızlığını doğrular. Google Sheets'in
+kendisine ağ çağrısı içeren bir test yoktur — bu, gerçek kurulumla
+`npm run inngest:dev` + elle bir tarama tetikleyerek denenir.

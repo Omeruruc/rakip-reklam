@@ -36,7 +36,7 @@ export async function migrate(): Promise<void> {
 /** Testler arasında tabloları boşaltır (kimlik sayaçları da sıfırlanır). */
 export async function truncateAll(): Promise<void> {
   await client.exec(`
-    truncate table notifications, ads, scrape_runs, competitors, dealers, brands
+    truncate table sheet_syncs, notifications, ads, scrape_runs, competitors, dealers, brands
     restart identity cascade;
   `);
 }

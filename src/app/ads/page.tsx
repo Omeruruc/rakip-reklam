@@ -1,11 +1,19 @@
 import Link from "next/link";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
+import { Pagination } from "@/components/pagination";
 import { requireSession } from "@/lib/auth";
 import { adLibraryAdUrl, adLibraryUrl, instagramProfileUrl } from "@/lib/adlibrary";
 import { PLATFORM_LABELS } from "@/lib/normalize";
 import { formatDate, formatDateTime } from "@/lib/utils";
-import { listAds, listAllCities, listBrands } from "@/server/queries";
+import {
+  ADS_PAGE_SIZE,
+  countAds,
+  listAds,
+  listAllCities,
+  listBrands,
+  type AdFilters,
+} from "@/server/queries";
 import { AdFilterBar } from "./ad-filter-bar";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +30,7 @@ export default async function AdsPage({
     state?: string;
     ad?: string;
     search?: string;
+    page?: string;
   }>;
 }) {
   await requireSession();
@@ -31,18 +40,39 @@ export default async function AdsPage({
   const days = query.range ? RANGES[query.range] : undefined;
   const since = days ? new Date(Date.now() - days * 24 * 60 * 60 * 1000) : undefined;
 
-  const [rows, brandRows, cities] = await Promise.all([
-    listAds({
-      brandId: Number.isFinite(brandId) ? brandId : undefined,
-      city: query.city || undefined,
-      since,
-      onlyActive: query.state !== "all",
-      adArchiveId: query.ad || undefined,
-      search: query.search || undefined,
-    }),
+  const rawPage = Number.parseInt(query.page ?? "1", 10);
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+  const offset = (page - 1) * ADS_PAGE_SIZE;
+
+  const filters: AdFilters = {
+    brandId: Number.isFinite(brandId) ? brandId : undefined,
+    city: query.city || undefined,
+    since,
+    onlyActive: query.state !== "all",
+    adArchiveId: query.ad || undefined,
+    search: query.search || undefined,
+  };
+
+  const [rows, total, brandRows, cities] = await Promise.all([
+    listAds(filters, { offset }),
+    countAds(filters),
     listBrands(),
     listAllCities(),
   ]);
+  const totalPages = Math.max(1, Math.ceil(total / ADS_PAGE_SIZE));
+
+  function hrefForPage(target: number): string {
+    const params = new URLSearchParams();
+    if (query.brand) params.set("brand", query.brand);
+    if (query.city) params.set("city", query.city);
+    if (query.range) params.set("range", query.range);
+    if (query.state) params.set("state", query.state);
+    if (query.search) params.set("search", query.search);
+    // Tek reklam görünümü ("ad") sayfalar arası taşınmaz.
+    if (target > 1) params.set("page", String(target));
+    const qs = params.toString();
+    return qs ? `/ads?${qs}` : "/ads";
+  }
 
   return (
     <AppShell active="/ads">
@@ -72,7 +102,18 @@ export default async function AdsPage({
         </div>
       ) : null}
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && total > 0 ? (
+        <div className="card px-5 py-16 text-center">
+          <p className="text-sm font-medium">Bu sayfada reklam yok.</p>
+          <p className="mt-1 text-sm muted">
+            Toplam {total} reklam var ama sayfa {page} boş —{" "}
+            <Link href={hrefForPage(1)} className="text-brand-500 hover:underline">
+              ilk sayfaya dönün
+            </Link>
+            .
+          </p>
+        </div>
+      ) : rows.length === 0 ? (
         <div className="card px-5 py-16 text-center">
           <p className="text-sm font-medium">Gösterilecek reklam yok.</p>
           <p className="mt-1 text-sm muted">
@@ -81,7 +122,10 @@ export default async function AdsPage({
         </div>
       ) : (
         <>
-          <p className="mb-3 text-xs muted">{rows.length} reklam</p>
+          <p className="mb-3 text-xs muted">
+            {total} reklamdan {offset + 1}–{offset + rows.length} arası
+            gösteriliyor
+          </p>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {rows.map((ad) => (
               <article key={ad.adArchiveId} className="card flex flex-col overflow-hidden">
@@ -188,6 +232,7 @@ export default async function AdsPage({
               </article>
             ))}
           </div>
+          <Pagination page={page} totalPages={totalPages} hrefForPage={hrefForPage} />
         </>
       )}
     </AppShell>

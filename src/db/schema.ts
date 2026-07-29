@@ -238,6 +238,38 @@ export const notifications = pgTable(
 );
 
 /* -------------------------------------------------------------------------- */
+/* sheet_syncs                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Google Sheets'e satır olarak aktarılmış reklam kaydı.
+ *
+ * `notifications` ile aynı "claim önce, yaz sonra" deseni: satır Sheets'e
+ * YAZMADAN ÖNCE eklenir. UNIQUE (ad_archive_id) sayesinde aynı reklam iki kez
+ * satır olarak eklenemez — Slack bildirimlerinden AYRI bir tabloda tutulur,
+ * çünkü bu iki şey farklı hedeflere gider ve biri başarısız olsa diğerini
+ * etkilememelidir.
+ */
+export const sheetSyncs = pgTable(
+  "sheet_syncs",
+  {
+    id: serial("id").primaryKey(),
+    adArchiveId: varchar("ad_archive_id", { length: 64 })
+      .notNull()
+      .references(() => ads.adArchiveId, { onDelete: "cascade" }),
+    syncedAt: timestamp("synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    error: text("error"),
+  },
+  (t) => [
+    uniqueIndex("sheet_syncs_ad_unique").on(t.adArchiveId),
+    index("sheet_syncs_created_idx").on(t.createdAt),
+  ],
+);
+
+/* -------------------------------------------------------------------------- */
 /* İlişkiler                                                                   */
 /* -------------------------------------------------------------------------- */
 
@@ -265,11 +297,19 @@ export const adsRelations = relations(ads, ({ one, many }) => ({
     references: [competitors.id],
   }),
   notifications: many(notifications),
+  sheetSyncs: many(sheetSyncs),
 }));
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   ad: one(ads, {
     fields: [notifications.adArchiveId],
+    references: [ads.adArchiveId],
+  }),
+}));
+
+export const sheetSyncsRelations = relations(sheetSyncs, ({ one }) => ({
+  ad: one(ads, {
+    fields: [sheetSyncs.adArchiveId],
     references: [ads.adArchiveId],
   }),
 }));
@@ -285,4 +325,5 @@ export type Ad = typeof ads.$inferSelect;
 export type NewAd = typeof ads.$inferInsert;
 export type ScrapeRun = typeof scrapeRuns.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
+export type SheetSync = typeof sheetSyncs.$inferSelect;
 export type MatchStatus = (typeof matchStatusEnum.enumValues)[number];

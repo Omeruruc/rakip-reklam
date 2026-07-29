@@ -221,7 +221,8 @@ export type AdFilters = {
   search?: string;
 };
 
-export async function listAds(filters: AdFilters = {}, limit = 120) {
+/** listAds ve countAds AYNI koşulları kullanır — sayfalama toplamı yanlış olmasın. */
+function buildAdConditions(filters: AdFilters) {
   const conditions = [];
   if (filters.brandId) conditions.push(eq(dealers.brandId, filters.brandId));
   if (filters.city) conditions.push(eq(dealers.city, filters.city));
@@ -237,6 +238,18 @@ export async function listAds(filters: AdFilters = {}, limit = 120) {
     );
     if (searchCondition) conditions.push(searchCondition);
   }
+  return conditions;
+}
+
+export const ADS_PAGE_SIZE = 30;
+
+export async function listAds(
+  filters: AdFilters = {},
+  pagination: { limit?: number; offset?: number } = {},
+) {
+  const conditions = buildAdConditions(filters);
+  const limit = pagination.limit ?? ADS_PAGE_SIZE;
+  const offset = pagination.offset ?? 0;
 
   return db
     .select({
@@ -269,8 +282,21 @@ export async function listAds(filters: AdFilters = {}, limit = 120) {
     .innerJoin(dealers, eq(competitors.dealerId, dealers.id))
     .innerJoin(brands, eq(dealers.brandId, brands.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(ads.firstSeenAt))
-    .limit(limit);
+    .orderBy(desc(ads.firstSeenAt), desc(ads.adArchiveId))
+    .limit(limit)
+    .offset(offset);
+}
+
+/** Sayfalama toplam sayfa sayısını hesaplamak için. */
+export async function countAds(filters: AdFilters = {}): Promise<number> {
+  const conditions = buildAdConditions(filters);
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(ads)
+    .innerJoin(competitors, eq(ads.competitorId, competitors.id))
+    .innerJoin(dealers, eq(competitors.dealerId, dealers.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
+  return row?.n ?? 0;
 }
 
 export async function listAllCities() {

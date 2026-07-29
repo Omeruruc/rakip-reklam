@@ -257,6 +257,47 @@ describe("listAds", () => {
   });
 });
 
+describe("sayfalama (listAds offset/limit + countAds)", () => {
+  it("varsayılan çağrı sınırın altındaki veri için hepsini döndürür", async () => {
+    // 4 reklam, varsayılan ADS_PAGE_SIZE'ın (30) çok altında.
+    expect(await queries.listAds()).toHaveLength(4);
+  });
+
+  it("countAds toplam kaydı, filtreyle birlikte doğru sayar", async () => {
+    expect(await queries.countAds()).toBe(4);
+    expect(await queries.countAds({ onlyActive: true })).toBe(3);
+    expect(await queries.countAds({ brandId: brandA })).toBe(3);
+  });
+
+  it("offset + limit sayfaları böler, kayıt ne eksik ne mükerrer olur", async () => {
+    const page1 = await queries.listAds({}, { limit: 2, offset: 0 });
+    const page2 = await queries.listAds({}, { limit: 2, offset: 2 });
+    const page3 = await queries.listAds({}, { limit: 2, offset: 4 });
+
+    expect(page1).toHaveLength(2);
+    expect(page2).toHaveLength(2);
+    expect(page3).toHaveLength(0); // toplamın (4) ötesinde — boş, hata değil
+
+    const ids1 = page1.map((r) => r.adArchiveId);
+    const ids2 = page2.map((r) => r.adArchiveId);
+    // İki sayfa arasında kesişim yok; birlikte tüm kayıtları kapsar.
+    expect(ids1.filter((id) => ids2.includes(id))).toHaveLength(0);
+    expect([...ids1, ...ids2].sort()).toEqual(
+      (await queries.listAds()).map((r) => r.adArchiveId).sort(),
+    );
+  });
+
+  it("sıralama kararlıdır — aynı firstSeenAt'te adArchiveId ile tekilleşir", async () => {
+    // AD-ACTIVE-1 ve AD-BRAND-B aynı firstSeenAt'e sahip (fixture'da "now").
+    // Kararlı ikincil sıralama olmadan sayfa sınırında kayıt kaybolabilir.
+    const first = await queries.listAds({}, { limit: 4, offset: 0 });
+    const second = await queries.listAds({}, { limit: 4, offset: 0 });
+    expect(first.map((r) => r.adArchiveId)).toEqual(
+      second.map((r) => r.adArchiveId),
+    );
+  });
+});
+
 describe("eşleştirme kuyruğu", () => {
   it("unverified ve no_page kayıtları listeler, matched olanları dışlar", async () => {
     const rows = await queries.listMatchingQueue(brandA);

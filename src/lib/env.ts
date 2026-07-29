@@ -90,6 +90,37 @@ export const env = {
   get notifyBurstLimit() {
     return int("NOTIFY_BURST_LIMIT", 25);
   },
+  /**
+   * Google Sheets entegrasyonu — TAMAMEN OPSİYONEL.
+   *
+   * Üçü de tanımlı değilse `sheetsConfigured()` false döner ve senkron
+   * fonksiyonu sessizce atlanır (skipped); mevcut tarama/bildirim akışı
+   * hiçbir şekilde etkilenmez. Kurulum adımları README §14'te.
+   */
+  get googleSheetsId() {
+    return optional("GOOGLE_SHEETS_ID");
+  },
+  get googleServiceAccountEmail() {
+    return optional("GOOGLE_SERVICE_ACCOUNT_EMAIL");
+  },
+  /** Google Cloud Console'dan kopyalanan anahtardaki \n kaçışları çözülür. */
+  get googleServiceAccountPrivateKey() {
+    return optional("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY").replace(/\\n/g, "\n");
+  },
+  get googleSheetsTabName() {
+    return optional("GOOGLE_SHEETS_TAB_NAME", "Rakip Reklamlar");
+  },
+  /**
+   * Slack pinleme betiği için — Incoming Webhook'tan AYRI bir mekanizma.
+   * Webhook mesaj gönderir ama pinleyemez; pinlemek Bot Token (xoxb-...)
+   * ve `chat:write` + `pins:write` kapsamı ister.
+   */
+  get slackBotToken() {
+    return optional("SLACK_BOT_TOKEN");
+  },
+  get slackChannelId() {
+    return optional("SLACK_CHANNEL_ID");
+  },
 } as const;
 
 /** Sabit iş kuralları. */
