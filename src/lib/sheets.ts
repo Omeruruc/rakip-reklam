@@ -6,7 +6,7 @@ import { formatTrDate } from "./slack";
  * Google Sheets entegrasyonu.
  *
  * Kullanıcının istediği yedi sabit kolon (§ konuşması):
- * İl, İlçe, Bizdeki hangi bayinin rakibi, Rakip Bayi İsmi, Reklam Tarihi,
+ * Reklam Tarihi, Bizdeki hangi bayinin rakibi, Rakip Bayi İsmi, İl, İlçe,
  * URL, İnstagram Adresi.
  *
  * İlçe alanı şu an veri modelinde YOK (yalnızca İl tutuluyor) — bilerek
@@ -14,11 +14,11 @@ import { formatTrDate } from "./slack";
  */
 
 export const SHEET_HEADERS = [
-  "İl",
-  "İlçe",
+  "Reklam Tarihi",
   "Bizdeki hangi bayinin rakibi",
   "Rakip Bayi İsmi",
-  "Reklam Tarihi",
+  "İl",
+  "İlçe",
   "URL",
   "İnstagram Adresi",
 ] as const;
@@ -44,12 +44,12 @@ export type SheetRow = Record<(typeof SHEET_HEADERS)[number], string>;
  */
 export function buildSheetRow(input: SheetRowInput): SheetRow {
   return {
+    "Reklam Tarihi": formatTrDate(input.adDate),
+    "Bizdeki hangi bayinin rakibi": input.dealerName,
+    "Rakip Bayi İsmi": input.competitorName,
     İl: input.dealerCity ?? "",
     // Veri modelinde ilçe yok; sonradan eklenirse yalnızca burası değişir.
     İlçe: "",
-    "Bizdeki hangi bayinin rakibi": input.dealerName,
-    "Rakip Bayi İsmi": input.competitorName,
-    "Reklam Tarihi": formatTrDate(input.adDate),
     URL: input.fbPageId
       ? adLibraryUrl(input.fbPageId)
       : adLibraryAdUrl(input.adArchiveId),

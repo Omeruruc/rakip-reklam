@@ -508,7 +508,7 @@ etkilemez (`sheet_syncs` tablosu `notifications`'tan ayrı tutulur, aynı
 
 Kolonlar (sabit, bu sırayla):
 
-| İl | İlçe | Bizdeki hangi bayinin rakibi | Rakip Bayi İsmi | Reklam Tarihi | URL | İnstagram Adresi |
+| Reklam Tarihi | Bizdeki hangi bayinin rakibi | Rakip Bayi İsmi | İl | İlçe | URL | İnstagram Adresi |
 | --- | --- | --- | --- | --- | --- | --- |
 
 **İlçe kolonu şimdilik her zaman boştur.** Veri modelinde yalnızca İl
