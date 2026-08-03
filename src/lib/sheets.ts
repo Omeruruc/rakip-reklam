@@ -6,21 +6,21 @@ import { formatTrDate } from "./slack";
  * Google Sheets entegrasyonu.
  *
  * Kullanıcının istediği yedi sabit kolon (§ konuşması):
- * Reklam Tarihi, Rakip Bayi İsmi, URL, İnstagram Adresi,
- * Bizdeki hangi bayinin rakibi, İl, İlçe.
+ * İl, İlçe, Bizdeki hangi bayinin rakibi, Rakip Bayi İsmi, Reklam Tarihi,
+ * URL, İnstagram Adresi.
  *
  * İlçe alanı şu an veri modelinde YOK (yalnızca İl tutuluyor) — bilerek
  * boş bırakılıyor; ileride eklenirse yalnızca `buildSheetRow` değişir.
  */
 
 export const SHEET_HEADERS = [
-  "Reklam Tarihi",
-  "Rakip Bayi İsmi",
-  "URL",
-  "İnstagram Adresi",
-  "Bizdeki hangi bayinin rakibi",
   "İl",
   "İlçe",
+  "Bizdeki hangi bayinin rakibi",
+  "Rakip Bayi İsmi",
+  "Reklam Tarihi",
+  "URL",
+  "İnstagram Adresi",
 ] as const;
 
 export type SheetRowInput = {
@@ -44,18 +44,18 @@ export type SheetRow = Record<(typeof SHEET_HEADERS)[number], string>;
  */
 export function buildSheetRow(input: SheetRowInput): SheetRow {
   return {
-    "Reklam Tarihi": formatTrDate(input.adDate),
+    İl: input.dealerCity ?? "",
+    // Veri modelinde ilçe yok; sonradan eklenirse yalnızca burası değişir.
+    İlçe: "",
+    "Bizdeki hangi bayinin rakibi": input.dealerName,
     "Rakip Bayi İsmi": input.competitorName,
+    "Reklam Tarihi": formatTrDate(input.adDate),
     URL: input.fbPageId
       ? adLibraryUrl(input.fbPageId)
       : adLibraryAdUrl(input.adArchiveId),
     "İnstagram Adresi": input.instagramHandle
       ? instagramProfileUrl(input.instagramHandle)
       : "",
-    "Bizdeki hangi bayinin rakibi": input.dealerName,
-    İl: input.dealerCity ?? "",
-    // Veri modelinde ilçe yok; sonradan eklenirse yalnızca burası değişir.
-    İlçe: "",
   };
 }
 
