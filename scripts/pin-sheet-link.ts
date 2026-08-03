@@ -33,13 +33,19 @@ async function slackCall(
   token: string,
   body: Record<string, unknown>,
 ): Promise<SlackResponse> {
+  // Bazı Slack Web API metodları (pins.list gibi) JSON gövdeyi kabul etmiyor,
+  // yalnızca form-encoded — bu yüzden tüm çağrılar form-encoded gönderilir.
+  const form = new URLSearchParams();
+  for (const [key, value] of Object.entries(body)) {
+    if (value !== undefined) form.set(key, String(value));
+  }
   const response = await fetch(`${SLACK_API}/${method}`, {
     method: "POST",
     headers: {
-      "content-type": "application/json; charset=utf-8",
+      "content-type": "application/x-www-form-urlencoded; charset=utf-8",
       authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(body),
+    body: form,
   });
   return (await response.json()) as SlackResponse;
 }

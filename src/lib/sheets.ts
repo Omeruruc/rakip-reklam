@@ -97,6 +97,38 @@ export async function appendCompetitorAdRow(row: SheetRow): Promise<void> {
   await sheet.addRow(row);
 }
 
+/**
+ * Birden çok satırı TEK API çağrısında ekler (backfill için).
+ *
+ * `appendCompetitorAdRow`'u döngüde çağırmak her satır için ayrı bir
+ * `loadInfo` (okuma) isteği ürettiğinden dakikalık Sheets API kotasını
+ * hızla aşıyor — bu yüzden yükleme bir kez yapılır, satırlar toplu yazılır.
+ */
+export async function appendCompetitorAdRows(rows: SheetRow[]): Promise<void> {
+  if (rows.length === 0) return;
+
+  const { GoogleSpreadsheet } = await import("google-spreadsheet");
+  const { JWT } = await import("google-auth-library");
+
+  const auth = new JWT({
+    email: env.googleServiceAccountEmail,
+    key: env.googleServiceAccountPrivateKey,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+
+  const doc = new GoogleSpreadsheet(env.googleSheetsId, auth);
+  await doc.loadInfo();
+
+  const tabName = env.googleSheetsTabName;
+  const existing = doc.sheetsByTitle[tabName];
+
+  const sheet = existing
+    ? await ensureHeaderRow(existing)
+    : await doc.addSheet({ title: tabName, headerValues: [...SHEET_HEADERS] });
+
+  await sheet.addRows(rows);
+}
+
 async function ensureHeaderRow<T extends { loadHeaderRow(): Promise<void>; setHeaderRow(values: string[]): Promise<void> }>(
   sheet: T,
 ): Promise<T> {

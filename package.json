@@ -19,7 +19,8 @@
     "db:local": "tsx scripts/local-db.ts",
     "excel:sample": "tsx scripts/make-sample-excel.ts",
     "db:transfer": "tsx scripts/migrate-data.ts",
-    "slack:pin-sheet": "tsx scripts/pin-sheet-link.ts"
+    "slack:pin-sheet": "tsx scripts/pin-sheet-link.ts",
+    "sheets:backfill": "tsx scripts/backfill-sheets.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.2",
