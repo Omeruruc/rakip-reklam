@@ -68,41 +68,26 @@ export function sheetsConfigured(): boolean {
 }
 
 /**
- * Sheets'e tek satır ekler.
+ * Sheets'e tek satır ekler — başlığın hemen ALTINA (en üste).
  *
- * Sekme yoksa oluşturulur ve başlık satırı yazılır. Sekme varsa başlık satırı
- * OLDUĞU GİBİ bırakılır — elle eklenmiş ek kolonları silmez; yalnızca sekme
- * tamamen boşsa (başlık satırı hiç yoksa) başlık yazılır.
+ * Kullanıcı en yeni reklamı en üstte görmek istiyor; bu yüzden alta eklemek
+ * yerine başlığın altına bir satır açılıp oraya yazılıyor (bkz.
+ * `appendCompetitorAdRows`, asıl mantık orada).
  */
 export async function appendCompetitorAdRow(row: SheetRow): Promise<void> {
-  const { GoogleSpreadsheet } = await import("google-spreadsheet");
-  const { JWT } = await import("google-auth-library");
-
-  const auth = new JWT({
-    email: env.googleServiceAccountEmail,
-    key: env.googleServiceAccountPrivateKey,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-  });
-
-  const doc = new GoogleSpreadsheet(env.googleSheetsId, auth);
-  await doc.loadInfo();
-
-  const tabName = env.googleSheetsTabName;
-  const existing = doc.sheetsByTitle[tabName];
-
-  const sheet = existing
-    ? await ensureHeaderRow(existing)
-    : await doc.addSheet({ title: tabName, headerValues: [...SHEET_HEADERS] });
-
-  await sheet.addRow(row);
+  await appendCompetitorAdRows([row]);
 }
 
 /**
- * Birden çok satırı TEK API çağrısında ekler (backfill için).
+ * Birden çok satırı TEK API çağrısında, tablonun EN ÜSTÜNE (başlığın hemen
+ * altına) ekler — backfill'de olduğu kadar tekil eklemede de kullanılır.
  *
- * `appendCompetitorAdRow`'u döngüde çağırmak her satır için ayrı bir
- * `loadInfo` (okuma) isteği ürettiğinden dakikalık Sheets API kotasını
- * hızla aşıyor — bu yüzden yükleme bir kez yapılır, satırlar toplu yazılır.
+ * Neden "insert at top" ve neden ayrı bir istekle: google-spreadsheet'in
+ * `addRow`/`addRows` fonksiyonu her zaman verinin ALTINA ekler; en yeni
+ * satırı en üstte tutmak için önce boş satır(lar) açılır (`insertDimension`),
+ * sonra o satırlara ham Sheets API'siyle yazılır — kolon eşlemesi sekmenin
+ * GERÇEK başlık sırasına (`headerValues`) göre yapılır, kod içindeki
+ * `SHEET_HEADERS` sırasına değil (ikisi farklıysa bile doğru çalışır).
  */
 export async function appendCompetitorAdRows(rows: SheetRow[]): Promise<void> {
   if (rows.length === 0) return;
@@ -126,7 +111,36 @@ export async function appendCompetitorAdRows(rows: SheetRow[]): Promise<void> {
     ? await ensureHeaderRow(existing)
     : await doc.addSheet({ title: tabName, headerValues: [...SHEET_HEADERS] });
 
-  await sheet.addRows(rows);
+  const headerValues = sheet.headerValues;
+  const grid = rows.map((row) =>
+    headerValues.map((header) => (row as Record<string, string>)[header] ?? ""),
+  );
+
+  // Başlığın (0. satır) hemen altına `rows.length` boş satır aç.
+  await sheet.insertDimension(
+    "ROWS",
+    { startIndex: 1, endIndex: 1 + rows.length },
+    false,
+  );
+
+  const lastColumn = columnLetter(headerValues.length);
+  const writeRange = `${tabName}!A2:${lastColumn}${1 + rows.length}`;
+  await auth.request({
+    url: `https://sheets.googleapis.com/v4/spreadsheets/${env.googleSheetsId}/values/${encodeURIComponent(writeRange)}?valueInputOption=RAW`,
+    method: "PUT",
+    data: { values: grid },
+  });
+}
+
+function columnLetter(count: number): string {
+  let n = count;
+  let letters = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    letters = String.fromCharCode(65 + rem) + letters;
+    n = Math.floor((n - 1) / 26);
+  }
+  return letters;
 }
 
 async function ensureHeaderRow<T extends { loadHeaderRow(): Promise<void>; setHeaderRow(values: string[]): Promise<void> }>(
