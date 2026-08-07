@@ -28,6 +28,7 @@ async function main() {
       adArchiveId: ads.adArchiveId,
       startedAt: ads.startedAt,
       firstSeenAt: ads.firstSeenAt,
+      isActive: ads.isActive,
       competitorName: competitors.name,
       instagramHandle: competitors.instagramHandle,
       fbPageId: competitors.fbPageId,
@@ -62,6 +63,7 @@ async function main() {
         fbPageId: row.fbPageId,
         adArchiveId: row.adArchiveId,
         adDate: new Date(row.startedAt ?? row.firstSeenAt),
+        isActive: row.isActive,
       }),
     });
   }

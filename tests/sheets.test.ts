@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 describe("satır oluşturma (buildSheetRow) — saf fonksiyon", () => {
-  it("kullanıcının istediği yedi kolonu, istenen sırayla üretir", async () => {
+  it("kullanıcının istediği kolonları, istenen sırayla üretir", async () => {
     const { buildSheetRow, SHEET_HEADERS } = await import("@/lib/sheets");
     const row = buildSheetRow({
       competitorName: "Bandırma Lova Yatak",
@@ -11,14 +11,32 @@ describe("satır oluşturma (buildSheetRow) — saf fonksiyon", () => {
       fbPageId: "110095108749967",
       adArchiveId: "1234567890",
       adDate: new Date("2026-07-26T12:00:00Z"),
+      isActive: true,
     });
 
     expect(Object.keys(row)).toEqual([...SHEET_HEADERS]);
     expect(row["Reklam Tarihi"]).toBe("26.07.2026"); // 12:00 UTC + 3 = aynı gün
+    expect(row["Durum"]).toBe("Aktif");
     expect(row["Rakip Bayi İsmi"]).toBe("Bandırma Lova Yatak");
     expect(row["Bizdeki hangi bayinin rakibi"]).toBe("İşbir Yatak Bandırma");
     expect(row["İl"]).toBe("Balıkesir");
     expect(row["İlçe"]).toBe(""); // veri modelinde henüz yok — bilerek boş
+    expect(row["Reklam ID"]).toBe("1234567890");
+  });
+
+  it("durdurulmuş reklamda Durum kolonu 'Durduruldu' yazar", async () => {
+    const { buildSheetRow } = await import("@/lib/sheets");
+    const row = buildSheetRow({
+      competitorName: "X",
+      dealerName: "Y",
+      dealerCity: null,
+      instagramHandle: null,
+      fbPageId: null,
+      adArchiveId: "AD-1",
+      adDate: null,
+      isActive: false,
+    });
+    expect(row["Durum"]).toBe("Durduruldu");
   });
 
   it("Page ID varsa sayfanın Ad Library adresini kullanır", async () => {
@@ -31,6 +49,7 @@ describe("satır oluşturma (buildSheetRow) — saf fonksiyon", () => {
       fbPageId: "110095108749967",
       adArchiveId: "AD-1",
       adDate: null,
+      isActive: true,
     });
     expect(row.URL).toBe(
       "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=TR&view_all_page_id=110095108749967",
@@ -47,6 +66,7 @@ describe("satır oluşturma (buildSheetRow) — saf fonksiyon", () => {
       fbPageId: null,
       adArchiveId: "AD-1",
       adDate: null,
+      isActive: true,
     });
     expect(row.URL).toContain("id=AD-1");
   });
@@ -61,6 +81,7 @@ describe("satır oluşturma (buildSheetRow) — saf fonksiyon", () => {
       fbPageId: null,
       adArchiveId: "AD-1",
       adDate: null,
+      isActive: true,
     });
     expect(row["İnstagram Adresi"]).toBe("");
   });
@@ -75,6 +96,7 @@ describe("satır oluşturma (buildSheetRow) — saf fonksiyon", () => {
       fbPageId: null,
       adArchiveId: "AD-1",
       adDate: null,
+      isActive: true,
     });
     expect(row["İl"]).toBe("");
   });
@@ -89,6 +111,7 @@ describe("satır oluşturma (buildSheetRow) — saf fonksiyon", () => {
       fbPageId: null,
       adArchiveId: "AD-1",
       adDate: null,
+      isActive: true,
     });
     expect(row["Reklam Tarihi"]).toBe("bilinmiyor");
   });

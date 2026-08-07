@@ -506,15 +506,25 @@ bildirimlerinden **tamamen bağımsız** çalışır: biri başarısız olsa di�
 etkilemez (`sheet_syncs` tablosu `notifications`'tan ayrı tutulur, aynı
 "önce sahiplen, sonra yaz" deseniyle — bkz. §6).
 
+Yeni satırlar tablonun EN ÜSTÜNE (başlığın hemen altına) eklenir — en yeni
+reklam her zaman en üstte görünür.
+
 Kolonlar (sabit, bu sırayla):
 
-| Reklam Tarihi | Bizdeki hangi bayinin rakibi | Rakip Bayi İsmi | İl | İlçe | URL | İnstagram Adresi |
-| --- | --- | --- | --- | --- | --- | --- |
+| Reklam Tarihi | Durum | Bizdeki hangi bayinin rakibi | Rakip Bayi İsmi | İl | İlçe | URL | İnstagram Adresi | Reklam ID |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
 **İlçe kolonu şimdilik her zaman boştur.** Veri modelinde yalnızca İl
 tutuluyor; ilçe hiç toplanmıyor. İleride eklenmek istenirse yalnızca
 `src/lib/sheets.ts` içindeki `buildSheetRow` değişir, başka hiçbir yer
 etkilenmez.
+
+**Durum** kolonu `Aktif`/`Durduruldu` değerini taşır. Bir reklam durduğunda
+veya yeniden aktifleştiğinde, tarama bunu zaten hesapladığı diff'ten
+(`ad/status.changed` olayı → `update-sheet-status` fonksiyonu) otomatik olarak
+günceller — Apify'a ek bir sorgu göndermez, ek maliyet oluşturmaz. **Reklam
+ID** teknik bir kolondur: doğru satırı bulup güncelleyebilmek için gerekir,
+silinmemesi/değiştirilmemesi önerilir.
 
 Üç ortam değişkeninden biri eksikse (`GOOGLE_SHEETS_ID`,
 `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`) özellik

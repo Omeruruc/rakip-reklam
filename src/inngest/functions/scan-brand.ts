@@ -209,6 +209,30 @@ export const scanBrand = inngest.createFunction(
       );
     }
 
+    /* --- Sheets durum güncellemesi (durdu / yeniden aktif) ------------------
+     * Slack bildirimlerinden AYRI bir olay üzerinden yürür (bkz. client.ts) —
+     * yalnızca Sheets kurulu ise `update-sheet-status` bir şey yapar.
+     */
+    const statusChanges = [
+      ...result.stoppedAdIds.map((adArchiveId) => ({
+        adArchiveId,
+        isActive: false as const,
+      })),
+      ...result.reactivatedAdIds.map((adArchiveId) => ({
+        adArchiveId,
+        isActive: true as const,
+      })),
+    ];
+    if (statusChanges.length > 0) {
+      await step.sendEvent(
+        "emit-status-changes",
+        statusChanges.map(({ adArchiveId, isActive }) => ({
+          name: "ad/status.changed" as const,
+          data: { adArchiveId, isActive, brandId, runId },
+        })),
+      );
+    }
+
     /* --- Bildirimler ------------------------------------------------------- */
     const newAdIds = result.newAdIds;
 

@@ -130,6 +130,7 @@ export type ApplyResult = {
   adsFound: number;
   newAdIds: string[];
   reactivatedAdIds: string[];
+  stoppedAdIds: string[];
   stoppedCount: number;
   unchangedCount: number;
   /** pageId'si hiçbir rakibe denk gelmeyen kayıt sayısı. */
@@ -195,6 +196,7 @@ export async function applyScanResults(input: {
       adsFound: 0,
       newAdIds: [],
       reactivatedAdIds: [],
+      stoppedAdIds: [],
       stoppedCount: 0,
       unchangedCount: 0,
       unattributed,
@@ -290,6 +292,7 @@ export async function applyScanResults(input: {
     adsFound: scraped.length,
     newAdIds: diff.newAds.map((ad) => ad.adArchiveId),
     reactivatedAdIds: diff.reactivatedAds.map((ad) => ad.adArchiveId),
+    stoppedAdIds: diff.stoppedAdIds,
     stoppedCount: diff.stoppedAdIds.length,
     unchangedCount: diff.unchangedAds.length,
     unattributed,

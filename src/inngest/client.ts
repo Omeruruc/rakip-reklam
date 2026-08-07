@@ -19,6 +19,20 @@ type Events = {
       runId: number;
     };
   };
+  /**
+   * Bir reklam durduğunda veya yeniden aktifleştiğinde yayınlanır.
+   * `ad/change.detected`'tan AYRI tutulur: o olayı dinleyen notify-slack ve
+   * sync-sheet-row "yeni reklam" mantığıyla çalışıyor — aynı olay paylaşılsa
+   * durmuş bir reklam için yanlışlıkla "yeni reklam bulundu" mesajı giderdi.
+   */
+  "ad/status.changed": {
+    data: {
+      adArchiveId: string;
+      isActive: boolean;
+      brandId: number;
+      runId: number;
+    };
+  };
 };
 
 export const inngest = new Inngest({

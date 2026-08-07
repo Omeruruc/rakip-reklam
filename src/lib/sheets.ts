@@ -5,22 +5,28 @@ import { formatTrDate } from "./slack";
 /**
  * Google Sheets entegrasyonu.
  *
- * Kullanıcının istediği yedi sabit kolon (§ konuşması):
- * Reklam Tarihi, Bizdeki hangi bayinin rakibi, Rakip Bayi İsmi, İl, İlçe,
- * URL, İnstagram Adresi.
+ * Sabit kolonlar (§ konuşması): Reklam Tarihi, Durum, Bizdeki hangi bayinin
+ * rakibi, Rakip Bayi İsmi, İl, İlçe, URL, İnstagram Adresi, Reklam ID.
  *
  * İlçe alanı şu an veri modelinde YOK (yalnızca İl tutuluyor) — bilerek
  * boş bırakılıyor; ileride eklenirse yalnızca `buildSheetRow` değişir.
+ *
+ * "Reklam ID" teknik bir kolon: bir reklam sonradan durduğunda/yeniden
+ * aktifleştiğinde `updateSheetRowStatus`'un doğru satırı bulabilmesi için
+ * gerekli — URL kolonu bu iş için kullanılamaz çünkü sayfa linki (Page ID
+ * varsa) birden fazla reklamda aynı olabiliyor.
  */
 
 export const SHEET_HEADERS = [
   "Reklam Tarihi",
+  "Durum",
   "Bizdeki hangi bayinin rakibi",
   "Rakip Bayi İsmi",
   "İl",
   "İlçe",
   "URL",
   "İnstagram Adresi",
+  "Reklam ID",
 ] as const;
 
 export type SheetRowInput = {
@@ -32,6 +38,7 @@ export type SheetRowInput = {
   adArchiveId: string;
   /** Meta'nın bildirdiği kampanya başlangıcı; yoksa ilk görülme anı verilir. */
   adDate: Date | null;
+  isActive: boolean;
 };
 
 export type SheetRow = Record<(typeof SHEET_HEADERS)[number], string>;
@@ -45,6 +52,7 @@ export type SheetRow = Record<(typeof SHEET_HEADERS)[number], string>;
 export function buildSheetRow(input: SheetRowInput): SheetRow {
   return {
     "Reklam Tarihi": formatTrDate(input.adDate),
+    Durum: input.isActive ? "Aktif" : "Durduruldu",
     "Bizdeki hangi bayinin rakibi": input.dealerName,
     "Rakip Bayi İsmi": input.competitorName,
     İl: input.dealerCity ?? "",
@@ -56,6 +64,7 @@ export function buildSheetRow(input: SheetRowInput): SheetRow {
     "İnstagram Adresi": input.instagramHandle
       ? instagramProfileUrl(input.instagramHandle)
       : "",
+    "Reklam ID": input.adArchiveId,
   };
 }
 
@@ -65,6 +74,15 @@ export function sheetsConfigured(): boolean {
       env.googleServiceAccountEmail &&
       env.googleServiceAccountPrivateKey,
   );
+}
+
+async function getAuth() {
+  const { JWT } = await import("google-auth-library");
+  return new JWT({
+    email: env.googleServiceAccountEmail,
+    key: env.googleServiceAccountPrivateKey,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
 }
 
 /**
@@ -93,13 +111,7 @@ export async function appendCompetitorAdRows(rows: SheetRow[]): Promise<void> {
   if (rows.length === 0) return;
 
   const { GoogleSpreadsheet } = await import("google-spreadsheet");
-  const { JWT } = await import("google-auth-library");
-
-  const auth = new JWT({
-    email: env.googleServiceAccountEmail,
-    key: env.googleServiceAccountPrivateKey,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-  });
+  const auth = await getAuth();
 
   const doc = new GoogleSpreadsheet(env.googleSheetsId, auth);
   await doc.loadInfo();
@@ -107,9 +119,13 @@ export async function appendCompetitorAdRows(rows: SheetRow[]): Promise<void> {
   const tabName = env.googleSheetsTabName;
   const existing = doc.sheetsByTitle[tabName];
 
-  const sheet = existing
-    ? await ensureHeaderRow(existing)
-    : await doc.addSheet({ title: tabName, headerValues: [...SHEET_HEADERS] });
+  let sheet;
+  if (existing) {
+    sheet = await ensureHeaderRow(existing);
+  } else {
+    sheet = await doc.addSheet({ title: tabName, headerValues: [...SHEET_HEADERS] });
+    await hideAdIdColumn(sheet);
+  }
 
   const headerValues = sheet.headerValues;
   const grid = rows.map((row) =>
@@ -130,6 +146,80 @@ export async function appendCompetitorAdRows(rows: SheetRow[]): Promise<void> {
     method: "PUT",
     data: { values: grid },
   });
+}
+
+/**
+ * Bir reklam durduğunda/yeniden aktifleştiğinde ilgili satırın "Durum"
+ * hücresini günceller. Satır, "Reklam ID" kolonundaki değerle bulunur.
+ *
+ * Sheets'te "belirli bir değere göre satır bul" diye bir uç nokta yok; bu
+ * yüzden önce ID kolonunun TAMAMI tek istekle okunur (birkaç yüz satırda
+ * önemsiz maliyet), eşleşen satır bulunur, sonra yalnızca o hücreye yazılır.
+ *
+ * Satır bulunamazsa (reklam hiç Sheets'e yazılmamışsa, örn. özellik sonradan
+ * açıldıysa) sessizce `false` döner — düzeltmek için `sheets:backfill`
+ * yeniden çalıştırılabilir.
+ */
+export async function updateSheetRowStatus(
+  adArchiveId: string,
+  isActive: boolean,
+): Promise<boolean> {
+  const { GoogleSpreadsheet } = await import("google-spreadsheet");
+  const auth = await getAuth();
+
+  const doc = new GoogleSpreadsheet(env.googleSheetsId, auth);
+  await doc.loadInfo();
+
+  const tabName = env.googleSheetsTabName;
+  const sheet = doc.sheetsByTitle[tabName];
+  if (!sheet) return false;
+
+  await ensureHeaderRow(sheet);
+  const headerValues = sheet.headerValues;
+  const idColIndex = headerValues.indexOf("Reklam ID");
+  const statusColIndex = headerValues.indexOf("Durum");
+  if (idColIndex === -1 || statusColIndex === -1) return false;
+
+  const idColLetter = columnLetter(idColIndex + 1);
+  const idRange = `${tabName}!${idColLetter}2:${idColLetter}${sheet.rowCount}`;
+  const idRes = await auth.request<{ values?: string[][] }>({
+    url: `https://sheets.googleapis.com/v4/spreadsheets/${env.googleSheetsId}/values/${encodeURIComponent(idRange)}`,
+  });
+  const ids = idRes.data.values ?? [];
+  const rowOffset = ids.findIndex((row) => row[0] === adArchiveId);
+  if (rowOffset === -1) return false;
+
+  const targetRow = rowOffset + 2; // veri 2. satırdan başlıyor
+  const statusColLetter = columnLetter(statusColIndex + 1);
+  await auth.request({
+    url: `https://sheets.googleapis.com/v4/spreadsheets/${env.googleSheetsId}/values/${encodeURIComponent(`${tabName}!${statusColLetter}${targetRow}`)}?valueInputOption=RAW`,
+    method: "PUT",
+    data: { values: [[isActive ? "Aktif" : "Durduruldu"]] },
+  });
+
+  return true;
+}
+
+/**
+ * "Reklam ID" kolonu teknik bir alan — kullanıcıya görünmesine gerek yok,
+ * yalnızca `updateSheetRowStatus`'un satırı bulması için var. Sekme İLK
+ * oluşturulduğunda bir kez gizlenir; sonraki her ekleme bu adımı tekrarlamaz.
+ */
+async function hideAdIdColumn(sheet: {
+  headerValues: string[];
+  updateDimensionProperties(
+    dimension: "COLUMNS",
+    properties: { hiddenByUser: boolean },
+    bounds: { startIndex: number; endIndex: number },
+  ): Promise<unknown>;
+}): Promise<void> {
+  const idIndex = sheet.headerValues.indexOf("Reklam ID");
+  if (idIndex === -1) return;
+  await sheet.updateDimensionProperties(
+    "COLUMNS",
+    { hiddenByUser: true },
+    { startIndex: idIndex, endIndex: idIndex + 1 },
+  );
 }
 
 function columnLetter(count: number): string {

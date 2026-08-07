@@ -68,6 +68,7 @@ export const syncSheetRow = inngest.createFunction(
             // step.run sonuçları JSON'dan geçer; Date nesneleri metne
             // dönüşür (bkz. notify-slack.ts'teki aynı desen).
             adDate: new Date(context.startedAt ?? context.firstSeenAt),
+            isActive: true,
           }),
         ),
       );
