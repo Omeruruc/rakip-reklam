@@ -1,5 +1,10 @@
 import { config } from "@/lib/env";
-import { buildSheetRow, appendCompetitorAdRow, sheetsConfigured } from "@/lib/sheets";
+import {
+  buildSheetRow,
+  appendCompetitorAdRow,
+  sheetsConfigured,
+  SHEETS_WRITE_CONCURRENCY,
+} from "@/lib/sheets";
 import {
   claimSheetSync,
   loadSheetSyncContext,
@@ -24,7 +29,10 @@ export const syncSheetRow = inngest.createFunction(
     id: "sync-sheet-row",
     name: "Google Sheets satırı ekle",
     retries: config.retries,
-    concurrency: { limit: 5, key: "event.data.adArchiveId" },
+    concurrency: [
+      { limit: 5, key: "event.data.adArchiveId" },
+      SHEETS_WRITE_CONCURRENCY,
+    ],
   },
   { event: "ad/change.detected" },
   async ({ event, step }) => {

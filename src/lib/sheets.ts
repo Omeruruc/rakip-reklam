@@ -68,6 +68,22 @@ export function buildSheetRow(input: SheetRowInput): SheetRow {
   };
 }
 
+/**
+ * Sheets'e yazan TÜM Inngest fonksiyonlarının (sync-sheet-row,
+ * update-sheet-status) paylaştığı eşzamanlılık kilidi — aynı anda yalnızca
+ * BİR tanesi çalışabilir. `appendCompetitorAdRows` artık tek `batchUpdate`
+ * ile atomik yazsa da, bir satır EKLEME (insertDimension) ile bir DURUM
+ * GÜNCELLEME (satırı bul, tek hücre yaz) aynı anda çalışırsa güncelleme
+ * hâlâ yanlış satıra yazabilir (satır numarası okunduktan sonra kaymışsa) —
+ * bu kilit iki farklı fonksiyon türü arasındaki bu riski de kapatır.
+ * `scope: "env"` limiti fonksiyon bazında değil, tüm ortamda uygular.
+ */
+export const SHEETS_WRITE_CONCURRENCY = {
+  limit: 1,
+  key: '"sheets-write"',
+  scope: "env",
+} as const;
+
 export function sheetsConfigured(): boolean {
   return Boolean(
     env.googleSheetsId &&
@@ -100,12 +116,20 @@ export async function appendCompetitorAdRow(row: SheetRow): Promise<void> {
  * Birden çok satırı TEK API çağrısında, tablonun EN ÜSTÜNE (başlığın hemen
  * altına) ekler — backfill'de olduğu kadar tekil eklemede de kullanılır.
  *
- * Neden "insert at top" ve neden ayrı bir istekle: google-spreadsheet'in
- * `addRow`/`addRows` fonksiyonu her zaman verinin ALTINA ekler; en yeni
- * satırı en üstte tutmak için önce boş satır(lar) açılır (`insertDimension`),
- * sonra o satırlara ham Sheets API'siyle yazılır — kolon eşlemesi sekmenin
- * GERÇEK başlık sırasına (`headerValues`) göre yapılır, kod içindeki
- * `SHEET_HEADERS` sırasına değil (ikisi farklıysa bile doğru çalışır).
+ * Neden "insert at top": google-spreadsheet'in `addRow`/`addRows` fonksiyonu
+ * her zaman verinin ALTINA ekler; en yeni satırı en üstte tutmak için önce
+ * boş satır(lar) açılıp oraya yazılıyor. Kolon eşlemesi sekmenin GERÇEK
+ * başlık sırasına (`headerValues`) göre yapılır, kod içindeki `SHEET_HEADERS`
+ * sırasına değil (ikisi farklıysa bile doğru çalışır).
+ *
+ * Neden TEK `batchUpdate` isteği (satır açma + yazma AYRI çağrılar DEĞİL):
+ * bu iki adım önceden iki ayrı HTTP isteğiydi. Aynı anda birden fazla yeni
+ * reklam Sheets'e ekleniyorsa (bir taramada birkaç reklam birden bulunduğunda
+ * olağan), araya giren başka bir çağrının kendi satır açma isteği ikisinin
+ * arasına girip satırları kaydırabiliyordu — gözlemlenen boş satırlar ve
+ * karışık tarih sırasının gerçek nedeni buydu. Google, TEK `batchUpdate`
+ * içindeki istekleri atomik uygular; araya başka bir isteğin girmesi
+ * mümkün değil. Ayrıca bkz. `syncSheetWrites` (Inngest tarafında ek kilit).
  */
 export async function appendCompetitorAdRows(rows: SheetRow[]): Promise<void> {
   if (rows.length === 0) return;
@@ -132,19 +156,41 @@ export async function appendCompetitorAdRows(rows: SheetRow[]): Promise<void> {
     headerValues.map((header) => (row as Record<string, string>)[header] ?? ""),
   );
 
-  // Başlığın (0. satır) hemen altına `rows.length` boş satır aç.
-  await sheet.insertDimension(
-    "ROWS",
-    { startIndex: 1, endIndex: 1 + rows.length },
-    false,
-  );
-
-  const lastColumn = columnLetter(headerValues.length);
-  const writeRange = `${tabName}!A2:${lastColumn}${1 + rows.length}`;
   await auth.request({
-    url: `https://sheets.googleapis.com/v4/spreadsheets/${env.googleSheetsId}/values/${encodeURIComponent(writeRange)}?valueInputOption=RAW`,
-    method: "PUT",
-    data: { values: grid },
+    url: `https://sheets.googleapis.com/v4/spreadsheets/${env.googleSheetsId}:batchUpdate`,
+    method: "POST",
+    data: {
+      requests: [
+        {
+          insertDimension: {
+            range: {
+              sheetId: sheet.sheetId,
+              dimension: "ROWS",
+              startIndex: 1,
+              endIndex: 1 + rows.length,
+            },
+            inheritFromBefore: false,
+          },
+        },
+        {
+          updateCells: {
+            range: {
+              sheetId: sheet.sheetId,
+              startRowIndex: 1,
+              endRowIndex: 1 + rows.length,
+              startColumnIndex: 0,
+              endColumnIndex: headerValues.length,
+            },
+            rows: grid.map((rowValues) => ({
+              values: rowValues.map((value) => ({
+                userEnteredValue: { stringValue: value },
+              })),
+            })),
+            fields: "userEnteredValue",
+          },
+        },
+      ],
+    },
   });
 }
 

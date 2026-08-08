@@ -1,5 +1,9 @@
 import { config } from "@/lib/env";
-import { sheetsConfigured, updateSheetRowStatus } from "@/lib/sheets";
+import {
+  sheetsConfigured,
+  updateSheetRowStatus,
+  SHEETS_WRITE_CONCURRENCY,
+} from "@/lib/sheets";
 import { inngest } from "../client";
 
 /**
@@ -7,16 +11,16 @@ import { inngest } from "../client";
  * günceller. `sync-sheet-row` ile AYNI dosyaya yazar ama TAMAMEN BAĞIMSIZ
  * bir olayı (`ad/status.changed`) dinler — bkz. client.ts'teki açıklama.
  *
- * Eşzamanlılık kasıtlı düşük tutuldu: bir taramada onlarca reklam birden
- * durursa Sheets API'nin dakikalık kotasına takılmamak için (bkz. backfill
- * script'inde yaşanan 429 hatası).
+ * `SHEETS_WRITE_CONCURRENCY` limiti 1'e sabitlediği için hem Sheets API'nin
+ * dakikalık kotasına takılmayı hem de `sync-sheet-row` ile aynı anda çalışıp
+ * satırları birbirine karıştırmayı önlüyor (bkz. sheets.ts'teki açıklama).
  */
 export const updateSheetStatus = inngest.createFunction(
   {
     id: "update-sheet-status",
     name: "Sheets durumunu güncelle",
     retries: config.retries,
-    concurrency: { limit: 2 },
+    concurrency: [SHEETS_WRITE_CONCURRENCY],
   },
   { event: "ad/status.changed" },
   async ({ event, step }) => {
