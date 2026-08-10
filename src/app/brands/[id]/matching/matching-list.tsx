@@ -42,6 +42,14 @@ function adLibraryKeywordUrl(query: string) {
   return `https://www.facebook.com/ads/library/?${params.toString()}`;
 }
 
+type StatusFilter = "all" | "unverified" | "no_page";
+
+const FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "Tümü" },
+  { value: "unverified", label: "Eşleşmeyi bekliyor" },
+  { value: "no_page", label: "Sayfası yok" },
+];
+
 export function MatchingList({
   brandId,
   rows,
@@ -51,6 +59,8 @@ export function MatchingList({
   rows: MatchingRow[];
   pageSearchEnabled: boolean;
 }) {
+  const [filter, setFilter] = useState<StatusFilter>("all");
+
   if (rows.length === 0) {
     return (
       <div className="card px-5 py-12 text-center">
@@ -62,16 +72,49 @@ export function MatchingList({
     );
   }
 
+  const filteredRows =
+    filter === "all" ? rows : rows.filter((row) => row.matchStatus === filter);
+
   return (
     <div className="space-y-3">
-      {rows.map((row) => (
-        <MatchingCard
-          key={row.id}
-          brandId={brandId}
-          row={row}
-          pageSearchEnabled={pageSearchEnabled}
-        />
-      ))}
+      <div className="flex flex-wrap gap-2">
+        {FILTERS.map((f) => {
+          const count =
+            f.value === "all"
+              ? rows.length
+              : rows.filter((row) => row.matchStatus === f.value).length;
+          const active = filter === f.value;
+          return (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setFilter(f.value)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                active
+                  ? "border-brand-500 bg-brand-500 text-white"
+                  : "border-[var(--border)] muted hover:text-[var(--fg)]"
+              }`}
+            >
+              {f.label} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {filteredRows.length === 0 ? (
+        <div className="card px-5 py-12 text-center">
+          <p className="text-sm font-medium">Bu filtrede kayıt yok.</p>
+        </div>
+      ) : (
+        filteredRows.map((row) => (
+          <MatchingCard
+            key={row.id}
+            brandId={brandId}
+            row={row}
+            pageSearchEnabled={pageSearchEnabled}
+          />
+        ))
+      )}
     </div>
   );
 }
