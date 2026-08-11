@@ -240,6 +240,21 @@ export const scanBrand = inngest.createFunction(
       return { runId, ok: true, ...summary(result) };
     }
 
+    /* --- Sheets senkronu: burst'ten BAĞIMSIZ, HER zaman ---------------------
+     * Aşağıdaki burst kontrolü yalnızca Slack bildirimini tek özet mesaja
+     * indirger (§10) — Sheets'in bundan etkilenip reklamları atlaması hatalı
+     * olur (gerçek üretimde yaşandı: 264 yeni reklamlık bir tarama burst
+     * eşiğini aştı, Slack özet mesajı gitti ama hiçbiri Sheets'e eklenmedi).
+     * Bu yüzden Sheets olayı burst dalından ÖNCE ve koşulsuz gönderilir.
+     */
+    await step.sendEvent(
+      "emit-sheet-sync",
+      newAdIds.map((adArchiveId) => ({
+        name: "ad/sheet-sync.requested" as const,
+        data: { adArchiveId, brandId, runId },
+      })),
+    );
+
     // Ani artış: tek tek mesaj yerine tek toplu mesaj (§10 gürültü önlemi).
     if (newAdIds.length > env.notifyBurstLimit) {
       await step.run("notify-burst", async () => {

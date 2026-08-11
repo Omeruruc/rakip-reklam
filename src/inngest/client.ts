@@ -33,6 +33,22 @@ type Events = {
       runId: number;
     };
   };
+  /**
+   * Yeni bir reklam bulunduğunda Sheets senkronu için yayınlanır.
+   * `ad/change.detected`'tan BİLEREK ayrı: o olay Slack'in "ani artış"
+   * durumunda (§10 gürültü önlemi) hiç yayınlanmıyor — tek özet mesaj
+   * gidiyor, tek tek olay yok. Sheets'in bu mantıktan etkilenmemesi,
+   * bir taramada 25'ten fazla yeni reklam bulunsa bile HEPSİNİN Sheets'e
+   * eklenmesi gerekir; bu yüzden ayrı bir olayla, burst kontrolünden önce
+   * ve koşulsuz yayınlanır (scan-brand.ts).
+   */
+  "ad/sheet-sync.requested": {
+    data: {
+      adArchiveId: string;
+      brandId: number;
+      runId: number;
+    };
+  };
 };
 
 export const inngest = new Inngest({

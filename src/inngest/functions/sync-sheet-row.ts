@@ -16,9 +16,15 @@ import { inngest } from "../client";
 /**
  * Yeni rakip reklamını Google Sheets'e satır olarak ekler.
  *
- * `notify-slack` ile AYNI olayı (`ad/change.detected`) dinler ama TAMAMEN
- * BAĞIMSIZ çalışır: Slack gönderimi başarısız olsa bile Sheets satırı
- * eklenir, tersi de geçerlidir. İkisi ayrı tablolarda (notifications /
+ * `notify-slack`'in dinlediği `ad/change.detected`'tan BİLEREK AYRI bir olayı
+ * (`ad/sheet-sync.requested`) dinler: Slack "ani artış" durumunda (§10
+ * gürültü önlemi) o olayı hiç yayınlamıyor, tek özet mesaj gönderiyor — ama
+ * Sheets'e HER yeni reklamın eklenmesi gerekiyor, burst sayısından bağımsız.
+ * Aksi hâlde büyük bir taramada (örn. 25'ten fazla yeni reklam) hiçbiri
+ * Sheets'e gitmezdi (gerçek üretimde yaşandı, bkz. scan-brand.ts).
+ *
+ * Bu ayrım sayesinde Slack gönderimi başarısız olsa bile Sheets satırı
+ * eklenir, tersi de geçerlidir — ayrı tablolarda (notifications /
  * sheet_syncs) sahiplenildiği için birbirini bloklamaz.
  *
  * Google Sheets kurulmamışsa (üç ortam değişkeninden biri eksikse) sessizce
@@ -34,7 +40,7 @@ export const syncSheetRow = inngest.createFunction(
       SHEETS_WRITE_CONCURRENCY,
     ],
   },
-  { event: "ad/change.detected" },
+  { event: "ad/sheet-sync.requested" },
   async ({ event, step }) => {
     const { adArchiveId } = event.data;
 
