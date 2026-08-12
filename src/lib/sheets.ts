@@ -6,7 +6,8 @@ import { formatTrDate } from "./slack";
  * Google Sheets entegrasyonu.
  *
  * Sabit kolonlar (§ konuşması): Reklam Tarihi, Durum, Bizdeki hangi bayinin
- * rakibi, Rakip Bayi İsmi, İl, İlçe, URL, İnstagram Adresi, Reklam ID.
+ * rakibi, Rakip Bayi İsmi, İl, İlçe, URL, İnstagram Adresi, Reklam ID,
+ * Tarih (sıra).
  *
  * İlçe alanı şu an veri modelinde YOK (yalnızca İl tutuluyor) — bilerek
  * boş bırakılıyor; ileride eklenirse yalnızca `buildSheetRow` değişir.
@@ -15,6 +16,13 @@ import { formatTrDate } from "./slack";
  * aktifleştiğinde `updateSheetRowStatus`'un doğru satırı bulabilmesi için
  * gerekli — URL kolonu bu iş için kullanılamaz çünkü sayfa linki (Page ID
  * varsa) birden fazla reklamda aynı olabiliyor.
+ *
+ * "Tarih (sıra)" da teknik bir kolon: "Reklam Tarihi" GG.AA.YYYY biçiminde
+ * metin olduğu için harf sırasına göre sıralamak yanlış sonuç verir (örn.
+ * "01.03.2026" alfabetik olarak "15.01.2026"dan önce gelir). Bu kolon aynı
+ * tarihi YYYYAAGG biçiminde tutar — Sheets'in `sortRange` isteği bunu doğru
+ * kronolojik sırada sıralayabilir. Her yazmadan sonra OTOMATİK sıralanır
+ * (bkz. `appendCompetitorAdRows`); elle sıralama gerekmez.
  */
 
 export const SHEET_HEADERS = [
@@ -27,6 +35,7 @@ export const SHEET_HEADERS = [
   "URL",
   "İnstagram Adresi",
   "Reklam ID",
+  "Tarih (sıra)",
 ] as const;
 
 export type SheetRowInput = {
@@ -50,8 +59,9 @@ export type SheetRow = Record<(typeof SHEET_HEADERS)[number], string>;
  * "Ad Library'de Aç" ile aynı bağlantı), yoksa reklamın kendi arşiv adresi.
  */
 export function buildSheetRow(input: SheetRowInput): SheetRow {
+  const displayDate = formatTrDate(input.adDate);
   return {
-    "Reklam Tarihi": formatTrDate(input.adDate),
+    "Reklam Tarihi": displayDate,
     Durum: input.isActive ? "Aktif" : "Durduruldu",
     "Bizdeki hangi bayinin rakibi": input.dealerName,
     "Rakip Bayi İsmi": input.competitorName,
@@ -65,7 +75,20 @@ export function buildSheetRow(input: SheetRowInput): SheetRow {
       ? instagramProfileUrl(input.instagramHandle)
       : "",
     "Reklam ID": input.adArchiveId,
+    "Tarih (sıra)": sortableDate(displayDate),
   };
+}
+
+/**
+ * "GG.AA.YYYY" -> "YYYYAAGG". Görüntülenen tarihten türetilir (bağımsız bir
+ * hesap değil) — ikisi arasında sapma imkânsız. Tarih bilinmiyorsa ("bilinmiyor")
+ * en küçük değer verilir; azalan sıralamada otomatik olarak en dibe düşer.
+ */
+function sortableDate(displayDate: string): string {
+  const match = displayDate.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (!match) return "00000000";
+  const [, dd, mm, yyyy] = match;
+  return `${yyyy}${mm}${dd}`;
 }
 
 /**
@@ -122,14 +145,23 @@ export async function appendCompetitorAdRow(row: SheetRow): Promise<void> {
  * başlık sırasına (`headerValues`) göre yapılır, kod içindeki `SHEET_HEADERS`
  * sırasına değil (ikisi farklıysa bile doğru çalışır).
  *
- * Neden TEK `batchUpdate` isteği (satır açma + yazma AYRI çağrılar DEĞİL):
- * bu iki adım önceden iki ayrı HTTP isteğiydi. Aynı anda birden fazla yeni
- * reklam Sheets'e ekleniyorsa (bir taramada birkaç reklam birden bulunduğunda
- * olağan), araya giren başka bir çağrının kendi satır açma isteği ikisinin
- * arasına girip satırları kaydırabiliyordu — gözlemlenen boş satırlar ve
- * karışık tarih sırasının gerçek nedeni buydu. Google, TEK `batchUpdate`
- * içindeki istekleri atomik uygular; araya başka bir isteğin girmesi
- * mümkün değil. Ayrıca bkz. `syncSheetWrites` (Inngest tarafında ek kilit).
+ * Neden TEK `batchUpdate` isteği (satır açma + yazma + sıralama AYRI çağrılar
+ * DEĞİL): satır açma ve yazma önceden iki ayrı HTTP isteğiydi. Aynı anda
+ * birden fazla yeni reklam Sheets'e ekleniyorsa (bir taramada birkaç reklam
+ * birden bulunduğunda olağan), araya giren başka bir çağrının kendi satır
+ * açma isteği ikisinin arasına girip satırları kaydırabiliyordu — gözlemlenen
+ * boş satırlar ve karışık tarih sırasının gerçek nedeni buydu. Google, TEK
+ * `batchUpdate` içindeki istekleri atomik uygular; araya başka bir isteğin
+ * girmesi mümkün değil. Ayrıca bkz. `SHEETS_WRITE_CONCURRENCY` (Inngest
+ * tarafında ek kilit).
+ *
+ * Neden HER yazmadan sonra `sortRange`: satırlar her zaman en üste eklense
+ * de, bir taramada bulunan reklamlar KENDİ ARALARINDA tarih sırasına göre
+ * gelmez (kaç gün önce başladıkları değil, hangi sırayla işlendikleri
+ * belirler) — büyük bir taramada (örn. 200+ yeni reklam) bu, gözle görülür
+ * karışık tarih sırasına yol açtı. Kalıcı çözüm: her ekleme sonrası TÜM veri
+ * aralığı "Tarih (sıra)" kolonuna göre yeniden sıralanır — hangi sırayla
+ * eklenirse eklensin, sonuç HER ZAMAN doğru kronolojik sırada kalır.
  */
 export async function appendCompetitorAdRows(rows: SheetRow[]): Promise<void> {
   if (rows.length === 0) return;
@@ -148,13 +180,14 @@ export async function appendCompetitorAdRows(rows: SheetRow[]): Promise<void> {
     sheet = await ensureHeaderRow(existing);
   } else {
     sheet = await doc.addSheet({ title: tabName, headerValues: [...SHEET_HEADERS] });
-    await hideAdIdColumn(sheet);
+    await hideTechnicalColumns(sheet);
   }
 
   const headerValues = sheet.headerValues;
   const grid = rows.map((row) =>
     headerValues.map((header) => (row as Record<string, string>)[header] ?? ""),
   );
+  const sortKeyIndex = headerValues.indexOf("Tarih (sıra)");
 
   await auth.request({
     url: `https://sheets.googleapis.com/v4/spreadsheets/${env.googleSheetsId}:batchUpdate`,
@@ -189,6 +222,24 @@ export async function appendCompetitorAdRows(rows: SheetRow[]): Promise<void> {
             fields: "userEnteredValue",
           },
         },
+        ...(sortKeyIndex === -1
+          ? []
+          : [
+              {
+                sortRange: {
+                  range: {
+                    sheetId: sheet.sheetId,
+                    startRowIndex: 1,
+                    endRowIndex: 200_000,
+                    startColumnIndex: 0,
+                    endColumnIndex: headerValues.length,
+                  },
+                  sortSpecs: [
+                    { dimensionIndex: sortKeyIndex, sortOrder: "DESCENDING" },
+                  ],
+                },
+              },
+            ]),
       ],
     },
   });
@@ -247,11 +298,11 @@ export async function updateSheetRowStatus(
 }
 
 /**
- * "Reklam ID" kolonu teknik bir alan — kullanıcıya görünmesine gerek yok,
- * yalnızca `updateSheetRowStatus`'un satırı bulması için var. Sekme İLK
- * oluşturulduğunda bir kez gizlenir; sonraki her ekleme bu adımı tekrarlamaz.
+ * "Reklam ID" ve "Tarih (sıra)" teknik kolonlardır — kullanıcıya görünmesine
+ * gerek yok. Sekme İLK oluşturulduğunda bir kez gizlenir; sonraki her ekleme
+ * bu adımı tekrarlamaz.
  */
-async function hideAdIdColumn(sheet: {
+async function hideTechnicalColumns(sheet: {
   headerValues: string[];
   updateDimensionProperties(
     dimension: "COLUMNS",
@@ -259,13 +310,15 @@ async function hideAdIdColumn(sheet: {
     bounds: { startIndex: number; endIndex: number },
   ): Promise<unknown>;
 }): Promise<void> {
-  const idIndex = sheet.headerValues.indexOf("Reklam ID");
-  if (idIndex === -1) return;
-  await sheet.updateDimensionProperties(
-    "COLUMNS",
-    { hiddenByUser: true },
-    { startIndex: idIndex, endIndex: idIndex + 1 },
-  );
+  for (const header of ["Reklam ID", "Tarih (sıra)"] as const) {
+    const index = sheet.headerValues.indexOf(header);
+    if (index === -1) continue;
+    await sheet.updateDimensionProperties(
+      "COLUMNS",
+      { hiddenByUser: true },
+      { startIndex: index, endIndex: index + 1 },
+    );
+  }
 }
 
 function columnLetter(count: number): string {

@@ -506,13 +506,17 @@ bildirimlerinden **tamamen bağımsız** çalışır: biri başarısız olsa di�
 etkilemez (`sheet_syncs` tablosu `notifications`'tan ayrı tutulur, aynı
 "önce sahiplen, sonra yaz" deseniyle — bkz. §6).
 
-Yeni satırlar tablonun EN ÜSTÜNE (başlığın hemen altına) eklenir — en yeni
-reklam her zaman en üstte görünür.
+Yeni satırlar eklendikten sonra tablo HER ZAMAN "Reklam Tarihi"ne göre
+otomatik olarak yeniden sıralanır (en yeni en üstte) — Sheets'in `sortRange`
+isteğiyle, aynı `batchUpdate` çağrısının içinde. Bu, büyük bir taramada
+(örn. 200+ yeni reklam) bile hangi sırayla eklendiklerinden bağımsız olarak
+sonucun her zaman doğru kronolojik sırada kalmasını garantiler — elle
+sıralama gerekmez.
 
 Kolonlar (sabit, bu sırayla):
 
-| Reklam Tarihi | Durum | Bizdeki hangi bayinin rakibi | Rakip Bayi İsmi | İl | İlçe | URL | İnstagram Adresi | Reklam ID |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Reklam Tarihi | Durum | Bizdeki hangi bayinin rakibi | Rakip Bayi İsmi | İl | İlçe | URL | İnstagram Adresi | Reklam ID | Tarih (sıra) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
 **İlçe kolonu şimdilik her zaman boştur.** Veri modelinde yalnızca İl
 tutuluyor; ilçe hiç toplanmıyor. İleride eklenmek istenirse yalnızca
@@ -522,9 +526,20 @@ etkilenmez.
 **Durum** kolonu `Aktif`/`Durduruldu` değerini taşır. Bir reklam durduğunda
 veya yeniden aktifleştiğinde, tarama bunu zaten hesapladığı diff'ten
 (`ad/status.changed` olayı → `update-sheet-status` fonksiyonu) otomatik olarak
-günceller — Apify'a ek bir sorgu göndermez, ek maliyet oluşturmaz. **Reklam
-ID** teknik bir kolondur: doğru satırı bulup güncelleyebilmek için gerekir,
-silinmemesi/değiştirilmemesi önerilir.
+günceller — Apify'a ek bir sorgu göndermez, ek maliyet oluşturmaz.
+
+**Reklam ID** ve **Tarih (sıra)** teknik kolonlardır (varsayılan olarak
+gizli), silinmemesi/değiştirilmemesi önerilir:
+- **Reklam ID** — Durum güncellemesinin doğru satırı bulması için gerekli.
+- **Tarih (sıra)** — "Reklam Tarihi" GG.AA.YYYY metin olduğu için harf
+  sırasına göre yanlış sıralanır (`sortRange` kronolojik değil alfabetik
+  sıralar); bu kolon aynı tarihi YYYYAAGG biçiminde tutar ki sıralama doğru
+  çalışsın.
+
+Sheets senkronu, Slack'in "ani artış" (§10) gürültü önleme mantığından
+BAĞIMSIZ ayrı bir olayla (`ad/sheet-sync.requested`) tetiklenir — bir
+taramada Slack'in özet mesaja düşürdüğü büyük bir grup (25'ten fazla yeni
+reklam) olsa bile HEPSİ Sheets'e eklenir.
 
 Üç ortam değişkeninden biri eksikse (`GOOGLE_SHEETS_ID`,
 `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`) özellik

@@ -22,6 +22,22 @@ describe("satır oluşturma (buildSheetRow) — saf fonksiyon", () => {
     expect(row["İl"]).toBe("Balıkesir");
     expect(row["İlçe"]).toBe(""); // veri modelinde henüz yok — bilerek boş
     expect(row["Reklam ID"]).toBe("1234567890");
+    expect(row["Tarih (sıra)"]).toBe("20260726");
+  });
+
+  it("tarih bilinmiyorsa sıralama anahtarı en küçük değeri alır (azalanda dibe düşer)", async () => {
+    const { buildSheetRow } = await import("@/lib/sheets");
+    const row = buildSheetRow({
+      competitorName: "X",
+      dealerName: "Y",
+      dealerCity: null,
+      instagramHandle: null,
+      fbPageId: null,
+      adArchiveId: "AD-1",
+      adDate: null,
+      isActive: true,
+    });
+    expect(row["Tarih (sıra)"]).toBe("00000000");
   });
 
   it("durdurulmuş reklamda Durum kolonu 'Durduruldu' yazar", async () => {
