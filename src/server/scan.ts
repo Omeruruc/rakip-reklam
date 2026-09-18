@@ -28,6 +28,10 @@ export type ScanTarget = {
 export type ScanTargets = {
   brandId: number;
   brandName: string;
+  /** Marka pasifse tarama hiç yapılmamalı — çağıran taraf (scan-brand.ts)
+   * Apify'a gitmeden önce bunu kontrol eder. Manuel tetikleme zaten
+   * `triggerScan`'de reddediliyor; bu ikinci bir güvence katmanıdır. */
+  brandActive: boolean;
   targets: ScanTarget[];
   /** Eşleştirme bekleyen rakip sayısı — taranmaz, panoda uyarı olarak görünür. */
   pendingMatch: number;
@@ -36,7 +40,7 @@ export type ScanTargets = {
 /** Yalnızca matched + Page ID'si olan rakipler taranır (AC-04). */
 export async function loadScanTargets(brandId: number): Promise<ScanTargets> {
   const [brand] = await db
-    .select({ id: brands.id, name: brands.name })
+    .select({ id: brands.id, name: brands.name, isActive: brands.isActive })
     .from(brands)
     .where(eq(brands.id, brandId))
     .limit(1);
@@ -75,6 +79,7 @@ export async function loadScanTargets(brandId: number): Promise<ScanTargets> {
   return {
     brandId: brand.id,
     brandName: brand.name,
+    brandActive: brand.isActive,
     targets: rows
       .filter((row): row is ScanTarget & { fbPageId: string } =>
         Boolean(row.fbPageId),

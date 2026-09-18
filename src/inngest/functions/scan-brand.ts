@@ -68,6 +68,19 @@ export const scanBrand = inngest.createFunction(
       loadScanTargets(brandId),
     );
 
+    /* --- Marka pasif: sessizce çık, Apify'a HİÇ gidilmez -------------------
+     * `triggerScan` zaten pasif markada reddediyor; bu ikinci katman, olay
+     * başka bir yoldan (ör. ileride eklenecek bir entegrasyon) gönderilirse
+     * de maliyetli bir çağrı yapılmasını engeller. Run kaydı bile açılmaz,
+     * Slack'e de bir şey gitmez — bu bir arıza değil, kasıtlı bir duraklama.
+     */
+    if (!scanTargets.brandActive) {
+      return {
+        skipped: true,
+        reason: `${scanTargets.brandName} pasif — tarama yapılmadı.`,
+      };
+    }
+
     const runId = await step.run("create-run", () =>
       createRun(brandId, env.apifyActorId),
     );

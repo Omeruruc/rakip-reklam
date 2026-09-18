@@ -393,6 +393,19 @@ export async function findPageCandidates(
 export async function triggerScan(brandId: number): Promise<ActionResult> {
   const session = await requireSession();
   try {
+    const [brand] = await db
+      .select({ isActive: brands.isActive })
+      .from(brands)
+      .where(eq(brands.id, brandId))
+      .limit(1);
+    if (!brand) return { ok: false, error: "Marka bulunamadı." };
+    if (!brand.isActive) {
+      return {
+        ok: false,
+        error: "Marka pasif — tarama tetiklenmedi. Önce markayı aktif edin.",
+      };
+    }
+
     await inngest.send({
       name: "brand/scan.requested",
       data: { brandId, trigger: "manual", requestedBy: session.email },
