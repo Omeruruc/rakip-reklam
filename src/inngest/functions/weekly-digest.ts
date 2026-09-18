@@ -13,6 +13,12 @@ export const weeklyDigest = inngest.createFunction(
   async ({ step }) => {
     const data = await step.run("collect", () => collectWeeklyDigest());
 
+    // Aktif marka yoksa (proje pasife alınmışsa) sessizce çık — boş
+    // "Aktif marka yok" mesajı her hafta gitmesin.
+    if (data.brands.length === 0) {
+      return { brands: 0, stoppedReported: 0, skipped: true };
+    }
+
     await step.run("send", () =>
       sendSlack(
         buildWeeklyDigestMessage({
